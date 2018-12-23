@@ -3,4 +3,6 @@
    T-SNE (t-distributed stochastic neighbor embedding) algorithm.
 2. in addition, it animate the algorithm training progress as series of activations scatter plots (in 2D).
 
-<h>To run:</h>
+## To run:
+1. to run only the animation class use: python tsne_animation.py
+2. to train the model, then visualize its activations, use: mnist_tsne.py
