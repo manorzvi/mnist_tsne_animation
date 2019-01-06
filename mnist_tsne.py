@@ -2,35 +2,38 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.manifold import TSNE
+import sys
 
 from mnist_tsne_utils import pack_features_vector
-from mnist_tsne_utils import grad
-from mnist_tsne_utils import feed4tsne
 from mnist_tsne_utils import create_dir_result
+from mnist_tsne_utils import compute_accuracy
+from mnist_tsne_utils import plot_progress
+from mnist_tsne_utils import mini_batch_train
+from mnistModel import mnistModel
+from mnistCNNmodel import mnistCNNmodel
+
 import seaborn as sns
+
 sns.set_style('darkgrid')
 sns.set_palette('muted')
 sns.set_context("notebook", font_scale=1.5,
                 rc={"lines.linewidth": 2.5})
-import matplotlib.patheffects as PathEffects
 
-from mnistModel import mnistModel
+tf.enable_eager_execution()
 
-activations = []
+print("TensorFlow version: {}".format(tf.__version__))
+print("Eager execution: {}".format(tf.executing_eagerly()))
 
 def main():
-    tf.enable_eager_execution()
-
-    print("TensorFlow version: {}".format(tf.__version__))
-    print("Eager execution: {}".format(tf.executing_eagerly()))
 
     mnist_train_csv = r'C:\Users\Manor\Desktop\projectB\mnist_train.csv'
     mnist_test_csv  = r'C:\Users\Manor\Desktop\projectB\mnist_test.csv'
 
-    batch_size_tsne = 10000
-    batch_size = 32
+    dir_results = 'tsne_results'
+    create_dir_result(dir_results)
 
-    class_names = ['Zero', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine']
+    batch_size_test = 10000
+    batch_size = 1
 
     column_names = ['1x1', '1x2', '1x3', '1x4', '1x5', '1x6', '1x7', '1x8', '1x9', '1x10', '1x11', '1x12', '1x13', '1x14',
                     '1x15', '1x16', '1x17', '1x18', '1x19', '1x20', '1x21', '1x22', '1x23', '1x24', '1x25', '1x26', '1x27',
@@ -99,7 +102,6 @@ def main():
                     '28x16', '28x17', '28x18', '28x19', '28x20', '28x21', '28x22', '28x23', '28x24', '28x25', '28x26',
                     '28x27', '28x28', 'label']
 
-    feature_names = column_names[:-1]
     label_name = column_names[-1]
 
     mnist_train = tf.contrib.data.make_csv_dataset(
@@ -109,113 +111,67 @@ def main():
         label_name=label_name,
         num_epochs=1)
 
-    mnist_tsne = tf.contrib.data.make_csv_dataset(
+    mnist_test = tf.contrib.data.make_csv_dataset(
         mnist_test_csv,
-        batch_size_tsne,
+        batch_size_test,
         column_names=column_names,
         label_name=label_name,
         num_epochs=1)
 
     mnist_train = mnist_train.map(pack_features_vector)
 
-    mnist_tsne = mnist_tsne.map(pack_features_vector)
+    mnist_test = mnist_test.map(pack_features_vector)
 
-    xtsne, ytsne = next(iter(mnist_tsne))
+    xtest, ytest = next(iter(mnist_test))
 
-    xtsne = xtsne[:500]
-    ytsne = ytsne[:500]
+    xtest = tf.to_float(xtest)/255.0
 
-    xtsne = tf.to_float(xtsne)/255.0
+    xtsne = xtest[:1000]
+    ytsne = ytest[:1000]
 
-    model = mnistModel()
-
+    mnistmodel = mnistModel()
+    #mnist_cnn_model = mnistCNNmodel()
     optimizer = tf.train.GradientDescentOptimizer(learning_rate=0.01)
 
     global_step = tf.contrib.eager.Variable(0)
 
-    # keep results for plotting
-    train_loss_results = []
-    train_accuracy_results = []
+    num_epochs = 5
+
+    train_loss_results, train_accuracy_results, activations = mini_batch_train(num_epochs, mnistmodel, optimizer,
+                                                                               global_step, mnist_train, xtest, ytest,
+                                                                               xtsne, ytsne, dir_results)
+    #train_loss_results, train_accuracy_results, activations = mini_batch_train(num_epochs, mnist_cnn_model, optimizer,
+    #                                                                           global_step, mnist_train, xtest, ytest,
+    #                                                                           xtsne, ytsne, dir_results)
 
 
-    num_epochs = 1
+    #plot_progress(train_loss_results, metrics='loss')
+    #plot_progress(train_accuracy_results, metrics='accuracy')
 
-    for epoch in range(num_epochs):
+    print("------------------------------------------------------")
+    #print("At End Of Training:    Accuracy on Test Set:    {:.4f}".format(compute_accuracy(mnist_cnn_model(xtest), ytest).numpy()))
+    print("At End Of Training:    Accuracy on Test Set:    {:.4f}".format(compute_accuracy(mnistmodel(xtest), ytest).numpy()))
+    print("------------------------------------------------------")
 
-        batch = 0
-        for x, y in mnist_train:
-
-            x = tf.to_float(x) / 255.0
-
-            # Optimize the model
-            loss_value, grads = grad(model, x, y)
-            optimizer.apply_gradients(zip(grads, model.variables),
-                                      global_step)
-
-            # Track progress
-            train_loss_results.append(loss_value.numpy())
-
-            # compare predicted label to actual label
-            train_accuracy_results.append(
-                np.sum(tf.argmax(model(x), axis=1, output_type=tf.int32).numpy() == y.numpy()) / y.numpy().size)
-
-            if batch % 50 == 0:
-                print("Epoch {:03d}, Batch {:03d}:    Loss: {:.3f}".format(epoch,
-                                                                           batch,
-                                                                           train_loss_results[-1]))
-            if batch % 10 == 0:
-                a2out = feed4tsne(model, xtsne)
-                activations.append(a2out)
-                a2out_tsne = TSNE(n_components=2, random_state=20181712)
-                a2out_proj = a2out_tsne.fit_transform(a2out.numpy())
-                np.save(dir_results + "\Epoch{:03d}Batch{:03d}TSNE_proj".format(epoch, batch), a2out_proj)
-                np.save(dir_results + "\Epoch{:03d}Batch{:03d}TAGS".format(epoch, batch), ytsne)
-
-            batch += 1
-
-        # end epoch
-
-    fig = plt.figure()
-    plt.plot(range(len(train_loss_results)), train_loss_results, label='train loss')
-    plt.plot(list(range(len(train_loss_results)))[::50], train_loss_results[::50], 'ro')
-    for i, j in zip(list(range(len(train_loss_results)))[::50], train_loss_results[::50]):
-        plt.annotate(str("{:02f}".format(j)), xy=(i,j))
-    plt.plot(len(train_loss_results)-1, train_loss_results[-1], 'ro')
-    plt.annotate(str("{:02f}".format(train_loss_results[-1])), xy=(len(train_loss_results)-1, train_loss_results[-1]))
-
-    plt.title('Train loss as function of iterations')
-    plt.xlabel('Iterations')
-    plt.ylabel('Loss')
-    plt.legend()
-    plt.savefig('mnist_train_loss_iteration_graph')
-    plt.show()
-    return xtsne, ytsne
-
-
-
-
-if __name__ == '__main__':
-    dir_results = 'tsne_results'
-    create_dir_result(dir_results)
-    xtsne, ytsne = main()
     xtsne = xtsne.numpy()
     ytsne = ytsne.numpy()
 
     print("Let's check if TSNE Algo produce diffrent output for 2 same inputs (with the same RS)")
     a2out_tsne_comparisons = TSNE(n_components=2, random_state=20181712)
-    a2out_proj = []
-    a2out_proj.append(a2out_tsne_comparisons.fit_transform(activations[-1].numpy()))
-    a2out_proj.append(a2out_tsne_comparisons.fit_transform(activations[-1].numpy()))
+    a2out_proj = [a2out_tsne_comparisons.fit_transform(activations[-1].numpy()),
+                  a2out_tsne_comparisons.fit_transform(activations[-1].numpy())]
 
     palette = np.array(sns.color_palette("hls", 10))
     fig, ax = plt.subplots(2, 1, sharex='col', sharey='row')
 
-    i=0
+    i = 0
     for a in a2out_proj:
         ax[i].scatter(a[:, 0], a[:, 1], lw=0, s=40, c=palette[ytsne.astype(np.int)])
         i += 1
 
     plt.savefig('TwoTSNE_same')
-    plt.show()
+    #plt.show()
 
 
+if __name__ == '__main__':
+    sys.exit(main())
