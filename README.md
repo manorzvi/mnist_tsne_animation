@@ -8,4 +8,6 @@
 2. create gif of tsne projections of the actination by run: tsne_animation.py
 3. Dont forget to warship the Flying Spaghetti Monster.
 
-# <font color='red'>NOT FINISHED!<\font>
+# NOT FINISHED!
+## DO NOT MERGE INTO MASTER!
+
