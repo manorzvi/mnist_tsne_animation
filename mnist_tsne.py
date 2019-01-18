@@ -106,8 +106,11 @@ class mnist_tsne:
                                                     '28x16', '28x17', '28x18', '28x19', '28x20', '28x21', '28x22', '28x23', '28x24', '28x25', '28x26',
                                                     '28x27', '28x28', 'label']
         self._label_name       = self._column_names[-1]
-        if optimizer == 'GradientDescentOptimizer':
-            self._optimizer    = tf.train.GradientDescentOptimizer(learning_rate=0.01)
+        #if optimizer == 'GradientDescentOptimizer':
+        #    self._optimizer    = tf.train.GradientDescentOptimizer(learning_rate=0.01)
+        if optimizer == 'AdamOptimizer':
+            self._optimizer = tf.train.AdamOptimizer()
+            #tf.variables_initializer(self._optimizer.variables())
         self._global_step      = tf.contrib.eager.Variable(0)
         self._num_epochs       = num_epoches
 
@@ -118,6 +121,7 @@ class mnist_tsne:
         self._RS = 11092001
 
         self.generate_dataset()
+        self._create_dir_result()
 
     def _loss_sparse_softmax_cross_entropy(self, x, y):
 
@@ -146,23 +150,27 @@ class mnist_tsne:
                 self.grad(x, y)
                 self._optimizer.apply_gradients(zip(self._last_gradient,
                                                     self._model.variables),
-                                                self._global_step)
-                if batch % 100 == 0:
-                    print("Epoch {:03d}, Batch {:03d}:      Loss: {:.3f}".format(epoch, batch, self._last_loss))
+                                                    self._global_step)
+                if batch % 5000 == 0:
+                    if not batch == 0:
+                        print("Epoch {:03d}, Batch {:03d}:      Loss: {:.3f}".format(epoch,
+                                                                                     batch,
+                                                                                     np.mean(np.asarray(self._train_loss_results[-5000:]))))
+                    else:
+                        print("Epoch {:03d}, Batch {:03d}:      Loss: {:.3f}".format(epoch,
+                                                                                     batch,
+                                                                                     self._last_loss))
 
                     # Track progress
-                    self.compute_accuracy(y)
+                    self.compute_accuracy(x, y)
 
                 # record t-sne results for the last 100 iterations of training
-                if epoch == self._num_epochs - 1 and batch > 59900:
-                    self.lla_tsne_projection(x, epoch, batch)
+                if epoch == self._num_epochs - 1 and batch > 59800:
+                    self.lla_tsne_projection(epoch, batch)
 
                 batch += 1
 
             # end epoch
-
-        # compare two last t-sne projections of the last layer activations, for the same same RS
-        self.tsne_compare()
 
     def tsne_compare(self):
 
@@ -175,20 +183,23 @@ class mnist_tsne:
 
         i = 0
         for a in lla_proj:
-            ax[i].scatter(a[:, 0], a[:, 1], lw=0, s=40, c=palette[self._ytsne.astype(np.int)])
+            ax[i].scatter(a[:, 0], a[:, 1], lw=0, s=10, c=palette[self._ytsne.astype(np.int)])
             i += 1
 
         plt.savefig('TwoTSNE_same')
 
-    def lla_tsne_projection(self, x, epoch, batch):
+    def lla_tsne_projection(self, epoch, batch):
 
-        lla = self._model(x, a2out=True)
+        lla = self._model(self._xtsne, a2out=True)
         self._activations.append(lla)
         lla_tsne_obj = TSNE(n_components=2, random_state=self._RS)
         lla_tsne_proj = lla_tsne_obj.fit_transform(lla.numpy())
-        np.save(self._dir_results + "\Epoch{:03d}Batch{:03d}TSNE_proj".format(epoch, batch), lla_tsne_proj)
-        if not os.path.isfile(self._dir_results + "\TSNE_tags".format(epoch, batch)):
-            np.save(self._dir_results + "\TSNE_tags".format(epoch, batch), self._ytsne)
+        cwd = os.getcwd()
+        os.chdir(self._dir_results)
+        np.save('Epoch{:03d}Batch{:03d}TSNE_proj'.format(epoch, batch), lla_tsne_proj)
+        if not os.path.isfile('TSNE_tags'.format(epoch, batch)):
+            np.save('TSNE_tags'.format(epoch, batch), self._ytsne)
+        os.chdir(cwd)
 
     def generate_dataset(self):
 
@@ -211,11 +222,11 @@ class mnist_tsne:
         self._xtsne = self._xtest[:1000].numpy()
         self._ytsne = self._ytest[:1000].numpy()
 
-    def compute_accuracy(self, labels):
-        predictions = tf.argmax(self._last_prediction, axis=1, output_type=tf.int64)
+    def compute_accuracy(self, data, labels):
+        #predictions = tf.argmax(self._last_prediction, axis=1, output_type=tf.int64)
+        predictions = tf.argmax(self._model(data), axis=1, output_type=tf.int64)
         labels = tf.cast(labels, tf.int64)
-        batch_size = int(self._last_prediction.shape[0])
-
+        batch_size = int(data.shape[0])
 
         self._train_accuracy_results.append((tf.reduce_sum(tf.cast(tf.equal(predictions,
                                                                             labels),
@@ -232,7 +243,8 @@ class mnist_tsne:
             os.makedirs(self._final_dir_result)
             print(self._final_dir_result + ' created again')
 
-    def _pack_features_vector(self, features, labels):
+    @staticmethod
+    def _pack_features_vector(features, labels):
         """Pack the features into a single array."""
         features = tf.stack(list(features.values()), axis=1)
         return features, labels
@@ -286,9 +298,10 @@ class mnist_tsne:
 
 def main():
 
-    mnist_tsne_obj = mnist_tsne()
+    mnist_tsne_obj = mnist_tsne(optimizer='AdamOptimizer')
     mnist_tsne_obj.mini_batch_train()
-    mnist_tsne_obj.plot_progress()
+    #mnist_tsne_obj.tsne_compare()
+    #mnist_tsne_obj.plot_progress()
 
 
 if __name__ == '__main__':
