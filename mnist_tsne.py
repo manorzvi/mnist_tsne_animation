@@ -1,7 +1,6 @@
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.manifold import TSNE
 import sys
 import os
 import shutil
@@ -20,9 +19,9 @@ class mnist_tsne:
                  dir_results='tsne_results',
                  train_csv=r'C:\Users\Manor\Desktop\projectB\mnist_train.csv',
                  test_csv=r'C:\Users\Manor\Desktop\projectB\mnist_test.csv',
-                 train_batch_size=1,
+                 train_batch_size=64,
                  test_batch_size=10000,
-                 num_epoches=5,
+                 num_epoches=3,
                  optimizer='GradientDescentOptimizer'):
 
         try:
@@ -106,8 +105,8 @@ class mnist_tsne:
                                                     '28x16', '28x17', '28x18', '28x19', '28x20', '28x21', '28x22', '28x23', '28x24', '28x25', '28x26',
                                                     '28x27', '28x28', 'label']
         self._label_name       = self._column_names[-1]
-        #if optimizer == 'GradientDescentOptimizer':
-        #    self._optimizer    = tf.train.GradientDescentOptimizer(learning_rate=0.01)
+        if optimizer == 'GradientDescentOptimizer':
+            self._optimizer    = tf.train.GradientDescentOptimizer(learning_rate=0.01)
         if optimizer == 'AdamOptimizer':
             self._optimizer = tf.train.AdamOptimizer()
             #tf.variables_initializer(self._optimizer.variables())
@@ -115,8 +114,10 @@ class mnist_tsne:
         self._num_epochs       = num_epoches
 
         self._train_loss_results     = []
-        self._train_accuracy_results = []
+        self._test_accuracy_results  = []
         self._activations            = []
+        
+        self._train_loss_results_for_graph     = []
 
         self._RS = 11092001
 
@@ -145,61 +146,67 @@ class mnist_tsne:
             for x, y in self._train_generator:
 
                 x = tf.to_float(x) / 255.0
-
                 # Optimize the model
                 self.grad(x, y)
                 self._optimizer.apply_gradients(zip(self._last_gradient,
                                                     self._model.variables),
                                                     self._global_step)
-                if batch % 5000 == 0:
-                    if not batch == 0:
-                        print("Epoch {:03d}, Batch {:03d}:      Loss: {:.3f}".format(epoch,
-                                                                                     batch,
-                                                                                     np.mean(np.asarray(self._train_loss_results[-5000:]))))
-                    else:
-                        print("Epoch {:03d}, Batch {:03d}:      Loss: {:.3f}".format(epoch,
-                                                                                     batch,
-                                                                                     self._last_loss))
+                if batch % 100 == 0:
 
                     # Track progress
-                    self.compute_accuracy(x, y)
+                    self.compute_accuracy(self._xtest, self._ytest)
 
-                # record t-sne results for the last 100 iterations of training
-                if epoch == self._num_epochs - 1 and batch > 59800:
-                    self.lla_tsne_projection(epoch, batch)
+                    if not batch == 0:
+                        print("Epoch {:03d}, Batch {:03d}:      Loss: {:.4f}    Test Accuracy: {:.4f}".format(epoch,
+                                                                                                              batch,
+                                                                                                              np.mean(np.asarray(self._train_loss_results[-5000:])),
+                                                                                                              self._test_accuracy_results[-1]))
+                    else:
+                        print("Epoch {:03d}, Batch {:03d}:      Loss: {:.4f}".format(epoch,
+                                                                                     batch,
+                                                                                     self._last_loss))
+                    
+                    self._train_loss_results_for_graph.append(np.mean(np.asarray(self._train_loss_results[-5000:])))
 
                 batch += 1
 
             # end epoch
 
-    def tsne_compare(self):
+        print('End of Mini-Batch Training')
 
-        print("Let's check if TSNE Algo produce diffrent output for 2 same inputs (with the same RS)")
-        lla_tsne_comparisons = TSNE(n_components=2, random_state=self._RS)
-        lla_proj = [lla_tsne_comparisons.fit_transform(self._activations[-1].numpy()),
-                    lla_tsne_comparisons.fit_transform(self._activations[-1].numpy())]
-        palette = np.array(sns.color_palette("hls", 10))
-        fig, ax = plt.subplots(2, 1, sharex='col', sharey='row')
+    def get_tSNE_activation(self):
+        _tsne = tf.contrib.data.make_csv_dataset(self._train_csv,
+                                                 1,
+                                                 column_names=self._column_names,
+                                                 label_name=self._label_name,
+                                                 num_epochs=1)
+        self._tsne_generator = _tsne.map(self._pack_features_vector)
 
         i = 0
-        for a in lla_proj:
-            ax[i].scatter(a[:, 0], a[:, 1], lw=0, s=10, c=palette[self._ytsne.astype(np.int)])
+        for xtsn, ytsn in self._tsne_generator:
+
+            xtsn = tf.to_float(xtsn) / 255.0
+
+            # Optimize the model
+            self.grad(xtsn, ytsn)
+            self._optimizer.apply_gradients(zip(self._last_gradient,
+                                                self._model.variables),
+                                            self._global_step)
+
+            lla = self._model(self._xtsne, a2out=True)
+            cwd = os.getcwd()
+            os.chdir(self._dir_results)
+            np.save('Epoch{:03d}Batch{:03d}_TSNE_activation'.format(0, i), lla.numpy())
+            if not os.path.isfile('TSNE_tags'):
+                np.save('TSNE_tags', self._ytsne)
+            os.chdir(cwd)
+
             i += 1
 
-        plt.savefig('TwoTSNE_same')
+            if i>100:
+                break
 
-    def lla_tsne_projection(self, epoch, batch):
-
-        lla = self._model(self._xtsne, a2out=True)
-        self._activations.append(lla)
-        lla_tsne_obj = TSNE(n_components=2, random_state=self._RS)
-        lla_tsne_proj = lla_tsne_obj.fit_transform(lla.numpy())
-        cwd = os.getcwd()
-        os.chdir(self._dir_results)
-        np.save('Epoch{:03d}Batch{:03d}TSNE_proj'.format(epoch, batch), lla_tsne_proj)
-        if not os.path.isfile('TSNE_tags'.format(epoch, batch)):
-            np.save('TSNE_tags'.format(epoch, batch), self._ytsne)
-        os.chdir(cwd)
+        print('End of t-SNE aggregation phase')
 
     def generate_dataset(self):
 
@@ -217,20 +224,22 @@ class mnist_tsne:
         self._test_generator  = _test.map(self._pack_features_vector)
 
         self._xtest, self._ytest = next(iter(self._test_generator))
-        self.xtest = tf.to_float(self._xtest) / 255.0
+        self._xtest = tf.to_float(self._xtest) / 255.0
 
         self._xtsne = self._xtest[:1000].numpy()
         self._ytsne = self._ytest[:1000].numpy()
 
     def compute_accuracy(self, data, labels):
-        #predictions = tf.argmax(self._last_prediction, axis=1, output_type=tf.int64)
+
+        data = tf.cast(data, tf.float32)
+
         predictions = tf.argmax(self._model(data), axis=1, output_type=tf.int64)
         labels = tf.cast(labels, tf.int64)
         batch_size = int(data.shape[0])
 
-        self._train_accuracy_results.append((tf.reduce_sum(tf.cast(tf.equal(predictions,
-                                                                            labels),
-                                                                   dtype=tf.float32)) / batch_size).numpy())
+        self._test_accuracy_results.append((tf.reduce_sum(tf.cast(tf.equal(predictions,
+                                                                           labels),
+                                                                  dtype=tf.float32)) / batch_size).numpy())
 
     def _create_dir_result(self):
         self._final_dir_result = os.path.join(self._current_dir, self._dir_results)
@@ -254,45 +263,71 @@ class mnist_tsne:
         plt.figure(figsize=[16, 16])
 
         if metrics == 'loss':
-            plt.plot(range(len(self._train_loss_results)),
-                     self._train_loss_results,
+            plt.plot(range(len(self._train_loss_results_for_graph)),
+                     self._train_loss_results_for_graph,
                      label='train loss')
-            plt.plot(list(range(len(self._train_loss_results)))[::500],
-                     self._train_loss_results[::500], '.')
 
-            for i, j in zip(list(range(len(self._train_loss_results)))[::500],
-                            self._train_loss_results[::500]):
+            for i, j in zip(list(range(len(self._train_loss_results_for_graph))),
+                            self._train_loss_results_for_graph):
                 plt.annotate(str("{:.03f}".format(j)), xy=(i, j))
 
-            plt.plot(len(self._train_loss_results) - 1, self._train_loss_results[-1], 'ro')
-            plt.annotate(str("{:.03f}".format(self._train_loss_results[-1])),
-                         xy=(len(self._train_loss_results) - 1,
-                             self._train_loss_results[-1]))
-            plt.title('Train loss as function of iterations')
+            plt.plot(len(self._train_loss_results_for_graph) - 1, self._train_loss_results_for_graph[-1], 'ro')
+            plt.annotate(str("{:.03f}".format(self._train_loss_results_for_graph[-1])),
+                         xy=(len(self._train_loss_results_for_graph) - 1,
+                             self._train_loss_results_for_graph[-1]))
+            plt.title('Train Loss as Function of Iterations')
             plt.ylabel('Loss')
-        if metrics == 'accuracy':
-            plt.plot(range(len(self._train_accuracy_results)),
-                     self._train_accuracy_results,
-                     label='train accuracy')
-            plt.plot(list(range(len(self._train_accuracy_results)))[::100],
-                     self._train_accuracy_results[::100], '.')
 
-            for i, j in zip(list(range(len(self._train_accuracy_results)))[::100],
-                            self._train_accuracy_results[::100]):
+        if metrics == 'accuracy':
+            plt.plot(range(len(self._test_accuracy_results)),
+                     self._test_accuracy_results,
+                     label='train accuracy')
+
+            for i, j in zip(list(range(len(self._test_accuracy_results))),
+                            self._test_accuracy_results):
                 plt.annotate(str("{:.03f}".format(j)), xy=(i, j))
 
-            plt.plot(len(self._train_accuracy_results) - 1, self._train_accuracy_results[-1], 'ro')
-            plt.annotate(str("{:.03f}".format(self._train_accuracy_results[-1])),
-                         xy=(len(self._train_accuracy_results) - 1,
-                             self._train_accuracy_results[-1]))
-            plt.title('Train accuracy as function of iterations')
+            plt.plot(len(self._test_accuracy_results) - 1, self._test_accuracy_results[-1], 'ro')
+            plt.annotate(str("{:.03f}".format(self._test_accuracy_results[-1])),
+                         xy=(len(self._test_accuracy_results) - 1,
+                             self._test_accuracy_results[-1]))
+            plt.title('Train Accuracy as Function of Iterations')
             plt.ylabel('Accuracy')
+
+        if metrics == 'all':
+            plt.plot(range(len(self._test_accuracy_results)),
+                     self._test_accuracy_results,
+                     label='train accuracy')
+            plt.plot(range(len(self._train_loss_results_for_graph)),
+                     self._train_loss_results_for_graph,
+                     label='train loss')
+
+            for i, j in zip(list(range(len(self._test_accuracy_results))),
+                            self._test_accuracy_results):
+                plt.annotate(str("{:.03f}".format(j)), xy=(i, j))
+            for i, j in zip(list(range(len(self._train_loss_results_for_graph))),
+                            self._train_loss_results_for_graph):
+                plt.annotate(str("{:.03f}".format(j)), xy=(i, j))
+
+            plt.plot(len(self._test_accuracy_results) - 1, self._test_accuracy_results[-1], 'ro')
+            plt.plot(len(self._train_loss_results_for_graph) - 1, self._train_loss_results_for_graph[-1], 'ro')
+
+            plt.annotate(str("{:.03f}".format(self._test_accuracy_results[-1])),
+                         xy=(len(self._test_accuracy_results) - 1,
+                             self._test_accuracy_results[-1]))
+            plt.annotate(str("{:.03f}".format(self._train_loss_results_for_graph[-1])),
+                         xy=(len(self._train_loss_results_for_graph) - 1,
+                             self._train_loss_results_for_graph[-1]))
+            plt.title('Train Accuracy and Loss as Function of Iterations')
+            plt.ylabel('Accuracy,Loss')
 
         plt.legend()
         if metrics == 'loss':
-            plt.savefig('mnist_train_loss_iteration_graph')
+            plt.savefig('mnist_train_loss')
         if metrics == 'accuracy':
-            plt.savefig('mnist_train_accuracy_iteration_graph')
+            plt.savefig('mnist_test_accuracy_over_iterations')
+        if metrics == 'all':
+            plt.savefig('mnist_train_loss_accuracy')
         plt.show()
 
 
@@ -300,8 +335,9 @@ def main():
 
     mnist_tsne_obj = mnist_tsne(optimizer='AdamOptimizer')
     mnist_tsne_obj.mini_batch_train()
-    #mnist_tsne_obj.tsne_compare()
-    #mnist_tsne_obj.plot_progress()
+    mnist_tsne_obj.get_tSNE_activation()
+    mnist_tsne_obj.plot_progress(metrics='accuracy')
+    mnist_tsne_obj.plot_progress(metrics='loss')
 
 
 if __name__ == '__main__':
