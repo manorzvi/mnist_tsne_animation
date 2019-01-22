@@ -14,8 +14,8 @@ We suggest to add a prior to tSNE cost function, in order to decrease embedding'
 ## To run:
 1. train mnist model by run: mnist_tsne.py
 2. create tSNE embeddings by: tsne_animation.generate_tSNE(metric='regular', location)
-   2.1 Specify metric for the modified tSNE algorithm: 'regular', 'init', 'prior'. 'regular' is the default
-   2.2 Generate arrays of sequential plots by: tsne_animation.generate_arrays(location)
+   <br>2.1 Specify metric for the modified tSNE algorithm: 'regular', 'init', 'prior'. 'regular' is the default
+   <br>2.2 Generate arrays of sequential plots by: tsne_animation.generate_arrays(location)
       2.2.1 Specify location to read embeddings from (same location you gave at generate_tSNE)
 3. animate final tSNE results by: tsne_animation._anim()
 4. create tSNE embeddings while record intermediate positions by: tsne_animation._generate_intermediate_positions(metric, origin, alpha)
