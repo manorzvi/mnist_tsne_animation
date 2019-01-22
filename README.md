@@ -16,11 +16,11 @@ We suggest to add a prior to tSNE cost function, in order to decrease embedding'
 2. create tSNE embeddings by: tsne_animation.generate_tSNE(metric='regular', location)
    <br>2.1 Specify metric for the modified tSNE algorithm: 'regular', 'init', 'prior'. 'regular' is the default
    <br>2.2 Generate arrays of sequential plots by: tsne_animation.generate_arrays(location)
-      2.2.1 Specify location to read embeddings from (same location you gave at generate_tSNE)
+      <br>2.2.1 Specify location to read embeddings from (same location you gave at generate_tSNE)
 3. animate final tSNE results by: tsne_animation._anim()
 4. create tSNE embeddings while record intermediate positions by: tsne_animation._generate_intermediate_positions(metric, origin, alpha)
-   4.1 this time metric, origin are lists
-   4.2 this methods generate embeddings and arrays for animation
+   <br>4.1 this time metric, origin are lists
+   <br.4.2 this methods generate embeddings and arrays for animation
 5. animate different metrices of tSNE on diffrent inputs by: tsne_animation._animate_intemediate_positions()
 
 5. Dont forget to warship the Flying Spaghetti Monster.
