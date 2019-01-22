@@ -21,7 +21,6 @@ RS = 20150101
 
 MACHINE_EPSILON = np.finfo(np.double).eps
 
-POSITIONS = []
 
 def _kl_divergence_prior(params, P, degrees_of_freedom, n_samples, n_components,
                          angle=0.5, skip_num_points=0, verbose=False,
@@ -53,7 +52,7 @@ def _kl_divergence_prior(params, P, degrees_of_freedom, n_samples, n_components,
 def _gradient_descent(objective, p0, it, n_iter,
                       n_iter_check=1, n_iter_without_progress=300,
                       momentum=0.8, learning_rate=200.0, min_gain=0.01,
-                      min_grad_norm=1e-7, verbose=0, args=None, kwargs=None):
+                      min_grad_norm=1e-7, verbose=0, args=None, kwargs=None, positions=None):
     if args is None:
         args = []
     if kwargs is None:
@@ -72,7 +71,7 @@ def _gradient_descent(objective, p0, it, n_iter,
         # only compute the error when needed
         kwargs['compute_error'] = check_convergence or i == n_iter - 1
 
-        POSITIONS.append(p.copy())
+        positions.append(p.copy())
         error, grad = objective(p, *args, **kwargs)
         grad_norm = linalg.norm(grad)
 
@@ -122,8 +121,8 @@ class TSNE(BaseEstimator):
     _N_ITER_CHECK = 50
 
     def __init__(self, n_components=2, perplexity=30.0,
-                 early_exaggeration=12.0, learning_rate=200.0, n_iter=1000,
-                 n_iter_without_progress=300, min_grad_norm=1e-7,
+                 early_exaggeration=12.0, learning_rate=200.0, n_iter=600,
+                 n_iter_without_progress=100, min_grad_norm=1e-7,
                  metric="euclidean", init="random", verbose=0,
                  random_state=None, method='barnes_hut', angle=0.5, alpha=0):
 
@@ -142,7 +141,7 @@ class TSNE(BaseEstimator):
         self.angle = angle
         self.alpha = alpha
 
-    def _fit(self, X, skip_num_points=0):
+    def _fit(self, X, positions=None, skip_num_points=0):
         """Fit the model using X as training data.
         Note that sparse arrays can only be handled by method='exact'.
         It is recommended that you convert your sparse array to dense
@@ -302,13 +301,13 @@ class TSNE(BaseEstimator):
         return self._tsne(P, degrees_of_freedom, n_samples,
                           X_embedded=X_embedded,
                           neighbors=neighbors_nn,
-                          skip_num_points=skip_num_points)
+                          skip_num_points=skip_num_points, positions=positions)
 
     def n_iter_final(self):
         return self.n_iter_
 
     def _tsne(self, P, degrees_of_freedom, n_samples, X_embedded,
-              neighbors=None, skip_num_points=0):
+              neighbors=None, skip_num_points=0, positions=None):
         """Runs t-SNE."""
         # t-SNE minimizes the Kullback-Leiber divergence of the Gaussians P
         # and the Student's t-distributions Q. The optimization algorithm that
@@ -328,6 +327,7 @@ class TSNE(BaseEstimator):
             "n_iter_without_progress": self._EXPLORATION_N_ITER,
             "n_iter": self._EXPLORATION_N_ITER,
             "momentum": 0.5,
+            "positions": positions
         }
         if self.method == 'barnes_hut':
             obj_func = _kl_divergence_bh
@@ -395,7 +395,7 @@ class TSNE(BaseEstimator):
 
         return X_embedded
 
-    def fit_transform(self, X, y=None):
+    def fit_transform(self, X, positions=None, y=None):
         """Fit X into an embedded space and return that transformed
         output.
         Parameters
@@ -409,7 +409,7 @@ class TSNE(BaseEstimator):
         X_new : array, shape (n_samples, n_components)
             Embedding of the training data in low-dimensional space.
         """
-        embedding = self._fit(X)
+        embedding = self._fit(X, positions)
         self.embedding_ = embedding
         return self.embedding_
 
