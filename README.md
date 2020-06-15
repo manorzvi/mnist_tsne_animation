@@ -1,4 +1,7 @@
-# mnist_tsne_animation
+# Visualization of RL Agents’ Learning Process Using Prior-Based Modification Of t-SNE Algorithm
+This project suggests a methodology to analyze the learning process of DRL agents. In this specific case we use A2C agents trained on the game Atari Breakout (Atari2600). 
+The methodology we suggest is based on a modification to the t-SNE algorithm for dimensionality reduction, and introduces a way to maintain continuity between consecutive projections of the algorithm by introducing a prior-based approach.
+
 1. Visualization of MNIST network LLA (last layer activations) by project it onto lower dimension space using
    modified version of T-SNE (t-distributed stochastic neighbor embedding) algorithm.
 2. There are 2 modes of animations:
